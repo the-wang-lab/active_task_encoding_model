@@ -51,7 +51,7 @@ def convert_train(raw, ntot):
     return arr
 
 
-def get_exp_features(matlab_file, downsample=1):
+def get_exp_data(matlab_file, downsample=1):
     '''Process matlab file stored on disk containing ephys experiment data
 
     The time steps are downsampled to the interval given by the integer downsample
@@ -108,7 +108,7 @@ def get_exp_features(matlab_file, downsample=1):
     blk_off = downsample_arr(blk_off, interval=downsample, mode='sum')
 
     # compile to dict
-    raw_data = {
+    raw_behavior = {
         'distance': dst,
         'licks':    lck,
         'reward_on':   rwd_on,
@@ -119,4 +119,17 @@ def get_exp_features(matlab_file, downsample=1):
         'blackout_off': blk_off,
     }
 
-    return raw_data
+    # spikes 
+    spk_raw = m["Spike"]["res"] # all spike times
+    clu = m["Spike"]["totclu"] # corresponding clusters
+
+    raw_spikes = dict() # dict with one spikes array per cluster
+    for i in np.unique(clu):
+        s_raw = spk_raw[np.where(clu == i )[0]] # spkikes from single single cluster
+        s = convert_train(s_raw, ntot) 
+        spk = downsample_arr(s, interval=downsample, mode='sum') # downsample and sum
+
+        n = 'cluster_{}'.format(str(i)) # name for cluster
+        raw_spikes[n] = spk
+
+    return raw_behavior, raw_spikes
