@@ -2,6 +2,12 @@ import numpy as np
 import pandas as pd
 from scipy.io import loadmat
 
+
+def steps2ms(x):
+    'convert raw time steps to ms'
+    y = x / 1250 * 1000 # "raw" data is at 1250 Hz
+    return y
+
 def downsample_arr(arr, interval, mode='average'):
     '''Downsample 1D array by the int given by interval
 
@@ -62,7 +68,7 @@ def get_exp_data(matlab_file):
 
     m = loadmat(matlab_file, simplify_cells=True) # raw data from matlab
 
-    # get start indices for trials
+    # get indices that indicate start of each trial
     lap_idx = m['Track']['lapID']
     trial_idx = np.unique(lap_idx) # array of unique trial ids
     trial_idx = np.nonzero(trial_idx)[0] # trials start at 1
@@ -126,7 +132,7 @@ def get_exp_data(matlab_file):
     blk_off = split_trials(blk_off)
 
     # compile to dict
-    raw_behavior = {
+    raw_dict = {
         'distance': dst,
         'licks':    lck,
         'reward_on':   rwd_on,
@@ -141,14 +147,19 @@ def get_exp_data(matlab_file):
     spk_raw = m["Spike"]["res"] # all spike times
     clu = m["Spike"]["totclu"] # corresponding clusters
 
-    raw_spikes = dict() # dict with one spikes array per cluster
     for i in np.unique(clu):
-        s_raw = spk_raw[np.where(clu == i )[0]] # spkikes from single single cluster
+        s_raw = spk_raw[np.where(clu == i )[0]] # spikes from single single cluster
         spk = convert_train(s_raw, ntot)
         spk = split_trials(spk)
 
-        n = 'cluster_{}'.format(str(i)) # name for cluster
-        raw_spikes[n] = spk
+        n = 'unit_{}'.format(str(i)) # name for cluster
+        raw_dict[n] = spk # add spikes to dict
 
-    return raw_behavior, raw_spikes, std_trial_idx
+    # create list of dataframes
+    dfs = [ pd.DataFrame(dtype=float) for _ in trial_start_idx[:-1] ]
+    for key in raw_dict:
+        for i, data in enumerate(raw_dict[key]):
+            dfs[i].loc[:, key] = data
+
+    return dfs, std_trial_idx
     
