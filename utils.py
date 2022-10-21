@@ -57,91 +57,54 @@ def convert_train(raw, ntot):
     return arr
 
 
-def get_exp_data(matlab_file):
-    '''Process matlab file stored on disk containing ephys experiment data
-
-    Returns dictionary with the experimental features:
-
-    read in ephys data stored as matlab struct
-
-    returns dict of experimental features'''
-
+def get_std_trials(matlab_file):
+    # TODO: this is specific to A026-20200323-01.mat and is used to filter out trials with different cue patterns
+    
     m = loadmat(matlab_file, simplify_cells=True) # raw data from matlab
 
-    # get indices that indicate start of each trial
-    lap_idx = m['Track']['lapID']
-    trial_idx = np.unique(lap_idx) # array of unique trial ids
-    trial_idx = np.nonzero(trial_idx)[0] # trials start at 1
-
-    trial_start_idx = [] # list with trial start indices
-    for i in trial_idx:
-        s = np.where(lap_idx == i)[0] # index for first occurence of i
-        trial_start_idx.append(s[0])
-    else:
-        trial_start_idx.append(s[-1] + 1) # one after end of last trial
-    trial_start_idx = np.array(trial_start_idx)
-
-    # get total number of time steps
-    dst_raw = m["Track"]["xMM"]
-    ntot = len(dst_raw)
-
-    # split array of len=ntot into trials and drop data before first and after last trial
-    split_trials = lambda arr: np.split(arr, trial_start_idx)[1:-1] 
-
-    # distance
-    dst = split_trials(dst_raw)
-
-    # licks
-    lck_raw = m["Laps"]["lickLfpInd"] 
-    lck = convert_train(lck_raw, ntot) 
-    lck = split_trials(lck)    
-
-    # rewards
-    rwd_raw = m["Laps"]["pumpLfpInd"]
-
-    rwd_on_raw = np.array([i[0] for i in rwd_raw])
-    rwd_on = convert_train(rwd_on_raw, ntot) 
-    rwd_on = split_trials(rwd_on)
-
-    rwd_off_raw = np.array([i[1] for i in rwd_raw])
-    rwd_off = convert_train(rwd_off_raw, ntot) 
-    rwd_off = split_trials(rwd_off) 
-
-    # standard and non-standard trials 
-    # TODO: this is specific to A026-20200323-01.mat and is used to filter out trials with different cue patterns
     mov_raw = m["Laps"]["movieOnLfpInd"] # movie on times
     mov_counts = np.array([ len(i) for i in mov_raw ]) # get number of movie on times per trial
     std_trial_idx = np.where(mov_counts == 3)[0] # indices for standard trials
 
-    # cues
-    cue_on_raw = np.array([i[0] for i in mov_raw]) # first two elements are cue on/off
-    cue_on = convert_train(cue_on_raw, ntot) 
-    cue_on = split_trials(cue_on)
 
-    cue_off_raw = np.array([i[1] for i in mov_raw]) # first two elements are cue on/off
-    cue_off = convert_train(cue_off_raw, ntot) # original code did idx-1 for cue off
-    cue_off = split_trials(cue_off)
+def get_exp_data(matlab_file):
+    '''Process matlab file stored on disk containing ephys experiment data
 
-    # blackout
-    blk_on_raw = np.array([ i[2] for i in mov_raw ]) # third element is blk on 
-    blk_on = convert_train(blk_on_raw, ntot) 
-    blk_on = split_trials(blk_on)
+    returns single dataframe'''
 
-    blk_off_raw = trial_start_idx[1:] # next trial is blk off
-    blk_off = convert_train(blk_off_raw, ntot) 
-    blk_off = split_trials(blk_off)
+    m = loadmat(matlab_file, simplify_cells=True) # raw data from matlab
+    df = pd.DataFrame(dtype=float) # empty dataframe
 
-    # compile to dict
-    raw_dict = {
-        'distance': dst,
-        'licks':    lck,
-        'reward_on':   rwd_on,
-        'reward_off':   rwd_off,
-        'cue_on':   cue_on,
-        'cue_off':  cue_off,
-        'blackout_on': blk_on,
-        'blackout_off': blk_off,
-    }
+    # trial indices
+    df.loc[:, 'trial'] = m['Track']['lapID'] # TODO change index of after last trial to something else then 0
+    ntot = len(df.loc[:, 'trial']) # total number of time steps
+
+    # distance
+    df.loc[:, 'dst'] = m["Track"]["xMM"]
+
+    # licks
+    df.loc[:, 'lck'] = convert_train(m["Laps"]["lickLfpInd"] , ntot) 
+
+    # rewards
+    pmp = m["Laps"]["pumpLfpInd"] # pump on/off
+    rwd = np.array([i[0] for i in pmp]) # only consider pump on
+    df.loc[:, 'rwd'] = convert_train(rwd, ntot) 
+
+    # cue and blackout
+    # TODO: this is specific to A026-20200323-01.mat and is used to filter out trials with different cue patterns
+    mov = m["Laps"]["movieOnLfpInd"] # movie times: cue on, cue off, blk on
+    cue_on = np.array([i[0] for i in mov]) # first element: cue on
+    df.loc[:, 'cue_on'] = convert_train(cue_on, ntot) 
+
+    cue_off = np.array([i[1] for i in mov]) # second element: cue off
+    df.loc[:, 'cue_off'] = convert_train(cue_off, ntot) 
+
+    blk_on = np.array([ i[2] for i in mov ]) # third element is blackout on 
+    df.loc[:, 'blk_on'] = convert_train(blk_on, ntot) 
+
+    nxt = m["Laps"]["startLfpInd"] # start trial?
+    blk_off = np.array([ i - 1 for i in nxt[1:]]) # next trial is blk off 
+    df.loc[:, 'blk_off'] = convert_train(blk_off, ntot) 
 
     # spikes 
     spk_raw = m["Spike"]["res"] # all spike times
@@ -150,16 +113,8 @@ def get_exp_data(matlab_file):
     for i in np.unique(clu):
         s_raw = spk_raw[np.where(clu == i )[0]] # spikes from single single cluster
         spk = convert_train(s_raw, ntot)
-        spk = split_trials(spk)
+        
+        n = 'unt_{}'.format(str(i)) # name for cluster
+        df.loc[:, n] = spk 
 
-        n = 'unit_{}'.format(str(i)) # name for cluster
-        raw_dict[n] = spk # add spikes to dict
-
-    # create list of dataframes
-    dfs = [ pd.DataFrame(dtype=float) for _ in trial_start_idx[:-1] ]
-    for key in raw_dict:
-        for i, data in enumerate(raw_dict[key]):
-            dfs[i].loc[:, key] = data
-
-    return dfs, std_trial_idx
-    
+    return df    
