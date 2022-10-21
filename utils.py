@@ -68,43 +68,54 @@ def get_std_trials(matlab_file):
 
 
 def get_exp_data(matlab_file):
-    '''Process matlab file stored on disk containing ephys experiment data
+    '''extracts experimental data from single ephys session
+    
+    requires path to matlab file
 
     returns single dataframe'''
 
     m = loadmat(matlab_file, simplify_cells=True) # raw data from matlab
-    df = pd.DataFrame(dtype=float) # empty dataframe
+    df = pd.DataFrame() # empty dataframe
 
     # trial indices
-    df.loc[:, 'trial'] = m['Track']['lapID'] # TODO change index of after last trial to something else then 0
+    df.loc[:, 'trial'] = m['Track']['lapID'].astype(int)
+    g = np.gradient(df.loc[:, 'trial']) # change index after last trial to -1 (this may not be consisent across sessions)
+    x = np.where( g < 0 )[0][0] # index where lapID is about to decrease
+    df.loc[x+1:, 'trial'] = -1
     ntot = len(df.loc[:, 'trial']) # total number of time steps
 
     # distance
-    df.loc[:, 'dst'] = m["Track"]["xMM"]
+    df.loc[:, 'dst'] = m["Track"]["xMM"].astype(float)
 
     # licks
-    df.loc[:, 'lck'] = convert_train(m["Laps"]["lickLfpInd"] , ntot) 
+    lck = convert_train(m["Laps"]["lickLfpInd"] , ntot) 
+    df.loc[:, 'lck'] = lck.astype(int)
 
     # rewards
     pmp = m["Laps"]["pumpLfpInd"] # pump on/off
-    rwd = np.array([i[0] for i in pmp]) # only consider pump on
-    df.loc[:, 'rwd'] = convert_train(rwd, ntot) 
+    pmp0 = np.array([i[0] for i in pmp]) # only consider pump on
+    rwd = convert_train(pmp0, ntot)
+    df.loc[:, 'rwd'] = rwd.astype(int)
 
     # cue and blackout
     # TODO: this is specific to A026-20200323-01.mat and is used to filter out trials with different cue patterns
     mov = m["Laps"]["movieOnLfpInd"] # movie times: cue on, cue off, blk on
-    cue_on = np.array([i[0] for i in mov]) # first element: cue on
-    df.loc[:, 'cue_on'] = convert_train(cue_on, ntot) 
+    mov0 = np.array([i[0] for i in mov]) # first element: cue on
+    cue_on = convert_train(mov0, ntot) 
+    df.loc[:, 'cue_on'] = cue_on.astype(int)
 
-    cue_off = np.array([i[1] for i in mov]) # second element: cue off
-    df.loc[:, 'cue_off'] = convert_train(cue_off, ntot) 
+    mov1 = np.array([i[1] for i in mov]) # second element: cue off
+    cue_off = convert_train(mov1, ntot) 
+    df.loc[:, 'cue_off'] = cue_off.astype(int)
 
-    blk_on = np.array([ i[2] for i in mov ]) # third element is blackout on 
-    df.loc[:, 'blk_on'] = convert_train(blk_on, ntot) 
+    mov2 = np.array([ i[2] for i in mov ]) # third element is blackout on 
+    blk_on = convert_train(mov2, ntot)
+    df.loc[:, 'blk_on'] =  blk_on.astype(int)
 
     nxt = m["Laps"]["startLfpInd"] # start trial?
-    blk_off = np.array([ i - 1 for i in nxt[1:]]) # next trial is blk off 
-    df.loc[:, 'blk_off'] = convert_train(blk_off, ntot) 
+    nxt = np.array([ i - 1 for i in nxt[1:]]) # next trial is blk off 
+    blk_off = convert_train(nxt, ntot) 
+    df.loc[:, 'blk_off'] = blk_off.astype(int)
 
     # spikes 
     spk_raw = m["Spike"]["res"] # all spike times
@@ -115,6 +126,7 @@ def get_exp_data(matlab_file):
         spk = convert_train(s_raw, ntot)
         
         n = 'unt_{}'.format(str(i)) # name for cluster
-        df.loc[:, n] = spk 
+        df.loc[:, n] = spk.astype(int)
 
     return df    
+
