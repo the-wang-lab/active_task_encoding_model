@@ -57,14 +57,20 @@ def convert_train(raw, ntot):
     return arr
 
 
-def get_std_trials(matlab_file):
+def get_good_trials(matlab_file):
     # TODO: this is specific to A026-20200323-01.mat and is used to filter out trials with different cue patterns
     
     m = loadmat(matlab_file, simplify_cells=True) # raw data from matlab
+    return m
+    idx = m['Track']['lapID'].astype(int)
 
-    mov_raw = m["Laps"]["movieOnLfpInd"] # movie on times
-    mov_counts = np.array([ len(i) for i in mov_raw ]) # get number of movie on times per trial
-    std_trial_idx = np.where(mov_counts == 3)[0] # indices for standard trials
+    mov = m["Laps"]["movieOnLfpInd"] # movie on times
+    cnt = np.array([ len(i) for i in mov ]) # get number of movie on times per trial
+    good = np.where(cnt == 3)[0] # indices for standard trials
+
+    n = np.unique(idx[good])
+
+    return n
 
 
 def get_exp_data(matlab_file):
@@ -98,7 +104,6 @@ def get_exp_data(matlab_file):
     df.loc[:, 'rwd'] = rwd.astype(int)
 
     # cue and blackout
-    # TODO: this is specific to A026-20200323-01.mat and is used to filter out trials with different cue patterns
     mov = m["Laps"]["movieOnLfpInd"] # movie times: cue on, cue off, blk on
     mov0 = np.array([i[0] for i in mov]) # first element: cue on
     cue_on = convert_train(mov0, ntot) 
@@ -116,6 +121,12 @@ def get_exp_data(matlab_file):
     nxt = np.array([ i - 1 for i in nxt[1:]]) # next trial is blk off 
     blk_off = convert_train(nxt, ntot) 
     df.loc[:, 'blk_off'] = blk_off.astype(int)
+
+    # extra
+    # TODO: this is specific to A026-20200323-01.mat and is used to filter out trials with different cue patterns
+    xtr = np.array([ i[3] for i in mov if len(i) == 4])
+    xtr = convert_train(xtr, ntot) 
+    df.loc[:, 'xtr'] = xtr.astype(int)
 
     # spikes 
     spk_raw = m["Spike"]["res"] # all spike times
