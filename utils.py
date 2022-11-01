@@ -85,9 +85,9 @@ def get_exp_data(matlab_file):
 
     # trial indices
     df.loc[:, 'trial'] = m['Track']['lapID'].astype(int)
-    g = np.gradient(df.loc[:, 'trial']) # change index after last trial to -1 (this may not be consisent across sessions)
+    g = np.gradient(df.loc[:, 'trial']) # fix index after last trial (this may not be consisent across sessions)
     x = np.where( g < 0 )[0][0] # index where lapID is about to decrease
-    df.loc[x+1:, 'trial'] = -1
+    df.loc[x+1:, 'trial'] = df.loc[x, 'trial'] + 1 # increase by 1
     ntot = len(df.loc[:, 'trial']) # total number of time steps
 
     # distance
