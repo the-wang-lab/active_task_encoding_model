@@ -8,6 +8,12 @@ def steps2ms(x):
     y = x / 1250 * 1000 # "raw" data is at 1250 Hz
     return y
 
+def ms2steps(x):
+    'convert ms to time steps'
+    y = x / 1000 * 1250
+    return y
+
+
 def downsample_arr(arr, interval, mode='average'):
     '''Downsample 1D array by the int given by interval
 
@@ -33,6 +39,11 @@ def downsample_arr(arr, interval, mode='average'):
     elif mode == 'ones':
         arr = arr.mean(axis=1)
         arr[ arr != 0 ] = 1
+    elif mode == 'first':
+        arr = arr[:, 0]
+    else:
+        raise Exception('mode is undefined: {}'.format(mode))
+
 
     return arr
 
@@ -51,6 +62,7 @@ def convert_train(raw, ntot):
         idx = raw
     idx = idx - 1 # start counting at 0
 
+    # TODO better use np.histogram to capture double evenets
     arr = np.zeros(ntot) # empty array with same size as xMM
     arr[idx] = 1 # set lick events as 1
 
@@ -61,7 +73,7 @@ def get_good_trials(matlab_file):
     # TODO: this is specific to A026-20200323-01.mat and is used to filter out trials with different cue patterns
     
     m = loadmat(matlab_file, simplify_cells=True) # raw data from matlab
-    return m
+
     idx = m['Track']['lapID'].astype(int)
 
     mov = m["Laps"]["movieOnLfpInd"] # movie on times
