@@ -13,6 +13,18 @@ def ms2steps(x):
     y = x / 1000 * 1250
     return y
 
+def add_time(df):
+    'add time in ms per trial to dataframe'
+    
+    df = df.copy()
+
+    for _, d in df.groupby('trial'):
+        s = np.arange(len(d))
+        t = steps2ms(s)
+        df.loc[d.index, 't'] = t
+
+    return df
+
 
 def downsample_arr(arr, interval, mode='average'):
     '''Downsample 1D array by the int given by interval
